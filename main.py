@@ -348,3 +348,73 @@ def get_order(session: PixRemixSession, order_id_hex: str) -> OrderView:
         maker=raw[0],
         side=raw[1],
         chain_id_origin=raw[2],
+        chain_id_settle=raw[3],
+        asset_in="0x" + raw[4].hex() if isinstance(raw[4], bytes) else raw[4].hex(),
+        asset_out="0x" + raw[5].hex() if isinstance(raw[5], bytes) else raw[5].hex(),
+        amount_in=raw[6],
+        amount_out_min=raw[7],
+        amount_filled_in=raw[8],
+        expiry_block=raw[9],
+        cancelled=raw[10],
+        settled=raw[11],
+        posted_at=raw[12],
+    )
+
+
+def order_exists(session: PixRemixSession, order_id_hex: str) -> bool:
+    """Check if order exists on chain."""
+    contract, _ = connect_session(session)
+    oid = _hex_to_bytes32(order_id_hex)
+    return contract.functions.orderExists(oid).call()
+
+
+def total_order_count(session: PixRemixSession) -> int:
+    """Total number of orders in the book."""
+    contract, _ = connect_session(session)
+    return contract.functions.totalOrderCount().call()
+
+
+def get_maker_order_ids(session: PixRemixSession, maker_address: str) -> List[str]:
+    """List order IDs for a maker."""
+    contract, w3 = connect_session(session)
+    maker = w3.to_checksum_address(maker_address)
+    raw = contract.functions.getMakerOrderIds(maker).call()
+    return ["0x" + (r.hex() if isinstance(r, bytes) else r.hex()) for r in raw]
+
+
+def quote_fill(session: PixRemixSession, order_id_hex: str, fill_amount_in: int) -> Tuple[int, int, int]:
+    """Returns (minAmountOut, feeAmount, makerReceives)."""
+    contract, _ = connect_session(session)
+    oid = _hex_to_bytes32(order_id_hex)
+    return contract.functions.quoteFill(oid, fill_amount_in).call()
+
+
+def post_order_tx(
+    session: PixRemixSession,
+    order_id_hex: str,
+    params: OrderParams,
+    gas_limit: int = 400_000,
+) -> str:
+    """Build and send postOrder transaction; returns tx hash. Requires session.private_key."""
+    if not session.private_key:
+        raise RuntimeError("Private key required for postOrder")
+    contract, w3 = connect_session(session)
+    acct = w3.eth.account.from_key(session.private_key)
+    oid = _hex_to_bytes32(order_id_hex)
+    asset_in = params.asset_in if len(params.asset_in) >= 32 else params.asset_in + b"\x00" * (32 - len(params.asset_in))
+    asset_out = params.asset_out if len(params.asset_out) >= 32 else params.asset_out + b"\x00" * (32 - len(params.asset_out))
+    tx = contract.functions.postOrder(
+        oid,
+        params.side,
+        params.chain_id_origin,
+        params.chain_id_settle,
+        asset_in,
+        asset_out,
+        params.amount_in,
+        params.amount_out_min,
+        params.expiry_block,
+    ).build_transaction({
+        "from": acct.address,
+        "nonce": w3.eth.get_transaction_count(acct.address),
+        "gas": gas_limit,
+    })
