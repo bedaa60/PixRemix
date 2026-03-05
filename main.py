@@ -68,3 +68,73 @@ class OrderView:
     chain_id_origin: int
     chain_id_settle: int
     asset_in: str
+    asset_out: str
+    amount_in: int
+    amount_out_min: int
+    amount_filled_in: int
+    expiry_block: int
+    cancelled: bool
+    settled: bool
+    posted_at: int
+
+
+@dataclass
+class SettlementView:
+    """Settlement record view."""
+    order_id: str
+    settlement_ref: str
+    chain_id_settle: int
+    finalized_at: int
+
+
+@dataclass
+class OrderBookConfig:
+    """Contract config (fee, limits, pause)."""
+    fee_bps: int
+    min_order_amount: int
+    max_order_amount: int
+    paused: bool
+
+
+@dataclass
+class PixRemixSession:
+    """Session state: RPC URL, contract address, optional key for writes."""
+    rpc_url: str
+    contract_address: str
+    private_key: Optional[str] = None
+    chain_id: Optional[int] = None
+
+    def to_json(self) -> str:
+        d = {
+            "rpc_url": self.rpc_url,
+            "contract_address": self.contract_address,
+            "chain_id": self.chain_id,
+        }
+        return json.dumps(d, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# ORDER ID DERIVATION (matches Hurrah.deriveOrderId)
+# ---------------------------------------------------------------------------
+
+HRH_NAMESPACE = hashlib.sha3_256(b"Hurrah.otc.v2").digest()[:32]
+
+
+def derive_order_id(maker_address: str, salt: bytes, nonce: int) -> str:
+    """Derive orderId = keccak256(abi.encodePacked(HRH_NAMESPACE, maker, salt, nonce))."""
+    try:
+        from eth_abi import encode
+        from eth_utils import keccak
+    except ImportError:
+        return "0x" + hashlib.sha256(
+            (maker_address + salt.hex() + str(nonce)).encode()
+        ).hexdigest()[:64]
+    maker = bytes.fromhex(maker_address.replace("0x", "").lower().zfill(40))
+    if len(salt) < 32:
+        salt = salt + b"\x00" * (32 - len(salt))
+    packed = encode(["bytes32", "address", "bytes32", "uint256"], [HRH_NAMESPACE, maker[:20], salt[:32], nonce])
+    return "0x" + keccak(packed).hex()
+
+
+def random_order_salt() -> bytes:
+    return random.randbytes(32)
