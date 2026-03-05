@@ -138,3 +138,73 @@ def derive_order_id(maker_address: str, salt: bytes, nonce: int) -> str:
 
 def random_order_salt() -> bytes:
     return random.randbytes(32)
+
+
+# ---------------------------------------------------------------------------
+# HURRAH ABI FRAGMENTS (for Web3 calls)
+# ---------------------------------------------------------------------------
+
+HURRAH_ABI_POST = {
+    "inputs": [
+        {"name": "orderId", "type": "bytes32"},
+        {"name": "side", "type": "uint8"},
+        {"name": "chainIdOrigin", "type": "uint64"},
+        {"name": "chainIdSettle", "type": "uint64"},
+        {"name": "assetIn", "type": "bytes32"},
+        {"name": "assetOut", "type": "bytes32"},
+        {"name": "amountIn", "type": "uint256"},
+        {"name": "amountOutMin", "type": "uint256"},
+        {"name": "expiryBlock", "type": "uint64"},
+    ],
+    "name": "postOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+}
+
+HURRAH_ABI_FILL = {
+    "inputs": [
+        {"name": "orderId", "type": "bytes32"},
+        {"name": "fillAmountIn", "type": "uint256"},
+        {"name": "fillAmountOut", "type": "uint256"},
+    ],
+    "name": "fillOrder",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function",
+}
+
+HURRAH_ABI_CANCEL = {
+    "inputs": [{"name": "orderId", "type": "bytes32"}],
+    "name": "cancelOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+}
+
+HURRAH_ABI_GET_ORDER = {
+    "inputs": [{"name": "orderId", "type": "bytes32"}],
+    "name": "getOrder",
+    "outputs": [
+        {"name": "maker", "type": "address"},
+        {"name": "side", "type": "uint8"},
+        {"name": "chainIdOrigin", "type": "uint64"},
+        {"name": "chainIdSettle", "type": "uint64"},
+        {"name": "assetIn", "type": "bytes32"},
+        {"name": "assetOut", "type": "bytes32"},
+        {"name": "amountIn", "type": "uint256"},
+        {"name": "amountOutMin", "type": "uint256"},
+        {"name": "amountFilledIn", "type": "uint256"},
+        {"name": "expiryBlock", "type": "uint64"},
+        {"name": "cancelled", "type": "bool"},
+        {"name": "settled", "type": "bool"},
+        {"name": "postedAt", "type": "uint64"},
+    ],
+    "stateMutability": "view",
+    "type": "function",
+}
+
+HURRAH_ABI_CONFIG = {
+    "inputs": [],
+    "name": "config",
+    "outputs": [
