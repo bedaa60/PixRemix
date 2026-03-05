@@ -278,3 +278,73 @@ HURRAH_ABI_FINALIZE_SETTLEMENT = {
 
 HURRAH_ABI_FULL = [
     HURRAH_ABI_POST,
+    HURRAH_ABI_FILL,
+    HURRAH_ABI_CANCEL,
+    HURRAH_ABI_GET_ORDER,
+    HURRAH_ABI_CONFIG,
+    HURRAH_ABI_ORDER_EXISTS,
+    HURRAH_ABI_TOTAL_ORDER_COUNT,
+    HURRAH_ABI_GET_ORDER_ID_AT,
+    HURRAH_ABI_GET_MAKER_ORDER_IDS,
+    HURRAH_ABI_QUOTE_FILL,
+    HURRAH_ABI_FINALIZE_SETTLEMENT,
+]
+
+
+# ---------------------------------------------------------------------------
+# WEB3 HELPERS
+# ---------------------------------------------------------------------------
+
+
+def _maybe_web3():
+    try:
+        from web3 import Web3
+        return Web3
+    except ImportError:
+        return None
+
+
+def _hex_to_bytes32(hex_str: str) -> bytes:
+    h = hex_str.replace("0x", "")
+    if len(h) < 64:
+        h = h.zfill(64)
+    return bytes.fromhex(h[:64])
+
+
+def connect_session(session: PixRemixSession) -> Any:
+    """Return a Web3 contract instance for Hurrah; raises if web3 not installed or RPC fails."""
+    Web3 = _maybe_web3()
+    if Web3 is None:
+        raise RuntimeError("Install web3: pip install web3")
+    w3 = Web3(Web3.HTTPProvider(session.rpc_url))
+    if not w3.is_connected():
+        raise RuntimeError("RPC not connected")
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(session.contract_address),
+        abi=HURRAH_ABI_FULL,
+    )
+    return contract, w3
+
+
+def get_config(session: PixRemixSession) -> OrderBookConfig:
+    """Fetch contract config (fee, limits, paused)."""
+    contract, _ = connect_session(session)
+    fee_bps, min_amt, max_amt, paused = contract.functions.config().call()
+    return OrderBookConfig(
+        fee_bps=fee_bps,
+        min_order_amount=min_amt,
+        max_order_amount=max_amt,
+        paused=paused,
+    )
+
+
+def get_order(session: PixRemixSession, order_id_hex: str) -> OrderView:
+    """Fetch a single order by ID."""
+    contract, w3 = connect_session(session)
+    oid = _hex_to_bytes32(order_id_hex)
+    raw = contract.functions.getOrder(oid).call()
+    return OrderView(
+        order_id=order_id_hex,
+        maker=raw[0],
+        side=raw[1],
+        chain_id_origin=raw[2],
