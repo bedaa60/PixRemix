@@ -838,3 +838,73 @@ def validate_order_params(
 
 
 def validate_fill_params(
+    fill_amount_in: int,
+    fill_amount_out: int,
+    remaining_in: int,
+    min_out_for_fill: int,
+) -> List[str]:
+    errs: List[str] = []
+    if fill_amount_in <= 0:
+        errs.append("Fill amount in must be positive.")
+    if fill_amount_in > remaining_in:
+        errs.append("Fill amount in exceeds remaining.")
+    if fill_amount_out < min_out_for_fill:
+        errs.append("Fill amount out below minimum for this fill.")
+    return errs
+
+
+# ---------------------------------------------------------------------------
+# CHAIN ID CONSTANTS (common EVM chains)
+# ---------------------------------------------------------------------------
+
+CHAIN_IDS = {
+    "mainnet": 1,
+    "goerli": 5,
+    "sepolia": 11155111,
+    "polygon": 137,
+    "arbitrum": 42161,
+    "optimism": 10,
+    "bsc": 56,
+    "avax": 43114,
+    "base": 8453,
+    "linea": 59144,
+}
+
+
+def chain_id_from_name(name: str) -> Optional[int]:
+    return CHAIN_IDS.get(name.lower())
+
+
+def list_chain_names() -> List[str]:
+    return list(CHAIN_IDS.keys())
+
+
+# ---------------------------------------------------------------------------
+# ASSET HELPERS (bytes32 <-> label)
+# ---------------------------------------------------------------------------
+
+
+def asset_to_bytes32(symbol: str) -> bytes:
+    """Pad symbol to 32 bytes (right-pad zero)."""
+    b = symbol.encode("utf-8")[:32]
+    return b + b"\x00" * (32 - len(b))
+
+
+def bytes32_to_asset(b: bytes) -> str:
+    """Strip trailing zeros and decode."""
+    return b.rstrip(b"\x00").decode("utf-8", errors="replace")
+
+
+# ---------------------------------------------------------------------------
+# RUNBOOK
+# ---------------------------------------------------------------------------
+
+RUNBOOK_STEPS = [
+    "1. Configure PixRemix: create pixremix_config.json with rpc_url, contract_address, optional private_key.",
+    "2. Check config: python PixRemix.py config",
+    "3. Post order (maker): python PixRemix.py post — follow prompts for side, chains, assets, amounts, expiry.",
+    "4. Fill order (taker): python PixRemix.py fill — provide order ID and fill amounts; msg.value = fill amount out.",
+    "5. Cancel order: python PixRemix.py cancel — provide order ID (maker only).",
+    "6. Query order: python PixRemix.py query — print order details by ID.",
+    "7. List maker orders: python PixRemix.py maker-orders — list order IDs for an address.",
+    "8. Export snapshot: python PixRemix.py export — dump order book range to JSON.",
