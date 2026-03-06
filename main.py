@@ -488,3 +488,73 @@ def _prompt_wei(prompt: str, default: Optional[int] = None) -> int:
         if not raw and default is not None:
             return default
         try:
+            if raw.endswith("ether") or raw.endswith("eth"):
+                return int(float(raw.replace("ether", "").replace("eth", "").strip()) * 10**18)
+            return int(raw)
+        except ValueError:
+            print("Enter a number (or e.g. 1.5 ether).")
+
+
+def _prompt_hex(prompt: str, length: int = 32) -> bytes:
+    while True:
+        raw = input(prompt + " ").strip().replace("0x", "")
+        if len(raw) >= length * 2:
+            return bytes.fromhex(raw[: length * 2])
+        print(f"Enter at least {length*2} hex chars.")
+
+
+def interactive_post_order(session: PixRemixSession) -> Optional[str]:
+    """Interactive flow to post one order; returns order_id_hex or None."""
+    print("=== Post order (maker) ===")
+    side = _prompt_int("Side (0=buy, 1=sell)", 0)
+    chain_origin = _prompt_int("Chain ID origin", 1)
+    chain_settle = _prompt_int("Chain ID settle", 1)
+    asset_in_hex = input("Asset In (hex, 32 bytes): ").strip().replace("0x", "")
+    asset_out_hex = input("Asset Out (hex, 32 bytes): ").strip().replace("0x", "")
+    asset_in = bytes.fromhex(asset_in_hex.zfill(64)[:64])
+    asset_out = bytes.fromhex(asset_out_hex.zfill(64)[:64])
+    amount_in = _prompt_wei("Amount In (wei)", 10**18)
+    amount_out_min = _prompt_wei("Amount Out Min (wei)", 10**18)
+    expiry_offset = _prompt_int("Expiry in blocks from now", 1000)
+    contract, w3 = connect_session(session)
+    current_block = w3.eth.block_number
+    expiry_block = current_block + expiry_offset
+    maker = w3.eth.account.from_key(session.private_key).address if session.private_key else "0x0000000000000000000000000000000000000000"
+    salt = random_order_salt()
+    nonce = random.randint(0, 2**64 - 1)
+    order_id_hex = derive_order_id(maker, salt, nonce)
+    params = OrderParams(
+        side=side,
+        chain_id_origin=chain_origin,
+        chain_id_settle=chain_settle,
+        asset_in=asset_in,
+        asset_out=asset_out,
+        amount_in=amount_in,
+        amount_out_min=amount_out_min,
+        expiry_block=expiry_block,
+    )
+    if not session.private_key:
+        print("No private key; order not submitted. Order ID would be:", order_id_hex)
+        return order_id_hex
+    try:
+        tx_hash = post_order_tx(session, order_id_hex, params)
+        print("Tx hash:", tx_hash)
+        return order_id_hex
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+
+def interactive_fill_order(session: PixRemixSession) -> Optional[str]:
+    """Interactive flow to fill an order; returns tx hash or None."""
+    print("=== Fill order (taker) ===")
+    order_id_hex = input("Order ID (hex): ").strip()
+    if not order_id_hex.startswith("0x"):
+        order_id_hex = "0x" + order_id_hex
+    fill_in = _prompt_wei("Fill amount In (wei)")
+    fill_out = _prompt_wei("Fill amount Out (wei) (msg.value)")
+    try:
+        tx_hash = fill_order_tx(session, order_id_hex, fill_in, fill_out)
+        print("Tx hash:", tx_hash)
+        return tx_hash
+    except Exception as e:
