@@ -908,3 +908,73 @@ RUNBOOK_STEPS = [
     "6. Query order: python PixRemix.py query — print order details by ID.",
     "7. List maker orders: python PixRemix.py maker-orders — list order IDs for an address.",
     "8. Export snapshot: python PixRemix.py export — dump order book range to JSON.",
+    "9. Health check: python PixRemix.py health — RPC and contract status.",
+    "10. CSV export: python PixRemix.py csv-export — export order book range to CSV.",
+]
+
+
+def get_runbook() -> List[str]:
+    return list(RUNBOOK_STEPS)
+
+
+def print_runbook() -> None:
+    for step in RUNBOOK_STEPS:
+        print(step)
+
+
+# ---------------------------------------------------------------------------
+# BATCH ORDER BUILDING
+# ---------------------------------------------------------------------------
+
+
+def build_orders_batch(
+    maker_address: str,
+    count: int,
+    side: int,
+    chain_origin: int,
+    chain_settle: int,
+    asset_in: bytes,
+    asset_out: bytes,
+    amount_in: int,
+    amount_out_min: int,
+    expiry_block: int,
+) -> List[Tuple[str, OrderParams]]:
+    """Build count orders with derived IDs; returns [(order_id_hex, OrderParams), ...]."""
+    out: List[Tuple[str, OrderParams]] = []
+    for i in range(count):
+        salt = random_order_salt()
+        nonce = random.getrandbits(64)
+        order_id_hex = derive_order_id(maker_address, salt, nonce)
+        params = OrderParams(
+            side=side,
+            chain_id_origin=chain_origin,
+            chain_id_settle=chain_settle,
+            asset_in=asset_in,
+            asset_out=asset_out,
+            amount_in=amount_in,
+            amount_out_min=amount_out_min,
+            expiry_block=expiry_block,
+        )
+        out.append((order_id_hex, params))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# SETTLEMENT HELPERS (off-chain reference)
+# ---------------------------------------------------------------------------
+
+
+def make_settlement_ref(tx_hash: str, chain_id: int) -> bytes:
+    """Derive a unique settlement ref from tx hash and chain (for finalizeSettlement)."""
+    h = hashlib.sha256((tx_hash + str(chain_id)).encode()).digest()
+    return h[:32]
+
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL CONTRACT VIEWS (if ABI extended)
+# ---------------------------------------------------------------------------
+
+HURRAH_ABI_GET_GLOBAL_STATS = {
+    "inputs": [],
+    "name": "getGlobalStats",
+    "outputs": [
