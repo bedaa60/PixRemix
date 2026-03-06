@@ -418,3 +418,73 @@ def post_order_tx(
         "nonce": w3.eth.get_transaction_count(acct.address),
         "gas": gas_limit,
     })
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+    return tx_hash.hex()
+
+
+def fill_order_tx(
+    session: PixRemixSession,
+    order_id_hex: str,
+    fill_amount_in: int,
+    fill_amount_out: int,
+    gas_limit: int = 350_000,
+) -> str:
+    """Send fillOrder with msg.value = fill_amount_out. Returns tx hash."""
+    if not session.private_key:
+        raise RuntimeError("Private key required for fillOrder")
+    contract, w3 = connect_session(session)
+    acct = w3.eth.account.from_key(session.private_key)
+    oid = _hex_to_bytes32(order_id_hex)
+    tx = contract.functions.fillOrder(oid, fill_amount_in, fill_amount_out).build_transaction({
+        "from": acct.address,
+        "value": fill_amount_out,
+        "nonce": w3.eth.get_transaction_count(acct.address),
+        "gas": gas_limit,
+    })
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+    return tx_hash.hex()
+
+
+def cancel_order_tx(session: PixRemixSession, order_id_hex: str, gas_limit: int = 150_000) -> str:
+    """Send cancelOrder. Returns tx hash."""
+    if not session.private_key:
+        raise RuntimeError("Private key required for cancelOrder")
+    contract, w3 = connect_session(session)
+    acct = w3.eth.account.from_key(session.private_key)
+    oid = _hex_to_bytes32(order_id_hex)
+    tx = contract.functions.cancelOrder(oid).build_transaction({
+        "from": acct.address,
+        "nonce": w3.eth.get_transaction_count(acct.address),
+        "gas": gas_limit,
+    })
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+    return tx_hash.hex()
+
+
+# ---------------------------------------------------------------------------
+# CLI PROMPTS AND INTERACTIVE FLOWS
+# ---------------------------------------------------------------------------
+
+
+def _prompt_int(prompt: str, default: Optional[int] = None) -> int:
+    while True:
+        suffix = f" [{default}]" if default is not None else ""
+        raw = input(prompt + suffix + " ").strip()
+        if not raw and default is not None:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            print("Enter an integer.")
+
+
+def _prompt_wei(prompt: str, default: Optional[int] = None) -> int:
+    while True:
+        suffix = f" [{default}]" if default is not None else ""
+        raw = input(prompt + suffix + " ").strip()
+        if not raw and default is not None:
+            return default
+        try:
