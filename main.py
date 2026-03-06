@@ -1118,3 +1118,73 @@ def quote_batch(
     for order_id_hex, fill_in in items:
         try:
             r = quote_fill(session, order_id_hex, fill_in)
+            out.append(r)
+        except Exception:
+            out.append((0, 0, 0))
+    return out
+
+
+def get_order_ids_page(session: PixRemixSession, page: int = 0, page_size: int = 20) -> List[str]:
+    """Return order IDs for the given page (0-based)."""
+    contract, _ = connect_session(session)
+    total = contract.functions.totalOrderCount().call()
+    start = page * page_size
+    if start >= total:
+        return []
+    end = min(start + page_size, total)
+    out: List[str] = []
+    for i in range(start, end):
+        oid_bytes = contract.functions.getOrderIdAt(i).call()
+        oid_hex = "0x" + (oid_bytes.hex() if isinstance(oid_bytes, bytes) else oid_bytes.hex())
+        out.append(oid_hex)
+    return out
+
+
+def orders_expiry_status(
+    session: PixRemixSession,
+    order_ids: List[str],
+    current_block: Optional[int] = None,
+) -> List[Tuple[str, bool, int]]:
+    """Return for each order_id: (order_id, is_expired, blocks_left). blocks_left is 0 if expired."""
+    contract, w3 = connect_session(session)
+    if current_block is None:
+        current_block = w3.eth.block_number
+    result: List[Tuple[str, bool, int]] = []
+    for oid_hex in order_ids:
+        try:
+            order = get_order(session, oid_hex)
+            left = max(0, order.expiry_block - current_block)
+            result.append((oid_hex, left == 0, left))
+        except Exception:
+            result.append((oid_hex, True, 0))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# PIXREMIX EXTRA: DRY-RUN BUILD & CSV EXPORT
+# ---------------------------------------------------------------------------
+
+
+def dry_run_post_tx(
+    session: PixRemixSession,
+    order_id_hex: str,
+    params: OrderParams,
+    gas_limit: int = 400_000,
+) -> Dict[str, Any]:
+    """Build postOrder transaction without sending. Returns tx dict (no private key needed for build)."""
+    contract, w3 = connect_session(session)
+    oid = _hex_to_bytes32(order_id_hex)
+    asset_in = params.asset_in if len(params.asset_in) >= 32 else params.asset_in + b"\x00" * (32 - len(params.asset_in))
+    asset_out = params.asset_out if len(params.asset_out) >= 32 else params.asset_out + b"\x00" * (32 - len(params.asset_out))
+    from_addr = session.private_key and w3.eth.account.from_key(session.private_key).address or "0x0000000000000000000000000000000000000000"
+    tx = contract.functions.postOrder(
+        oid,
+        params.side,
+        params.chain_id_origin,
+        params.chain_id_settle,
+        asset_in,
+        asset_out,
+        params.amount_in,
+        params.amount_out_min,
+        params.expiry_block,
+    ).build_transaction({
