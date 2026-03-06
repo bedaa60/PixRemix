@@ -1048,3 +1048,73 @@ def build_order_book_report(session: PixRemixSession, max_orders: int = 50) -> s
     try:
         total = total_order_count(session)
         cfg = get_config(session)
+        lines = [
+            f"=== {APP_NAME} Order Book Report ===",
+            f"Total orders: {total}",
+            f"Fee: {cfg.fee_bps} bps | Min: {cfg.min_order_amount} | Max: {cfg.max_order_amount} | Paused: {cfg.paused}",
+            "",
+        ]
+        contract, _ = connect_session(session)
+        n = min(max_orders, total)
+        for i in range(n):
+            oid_bytes = contract.functions.getOrderIdAt(i).call()
+            oid_hex = "0x" + (oid_bytes.hex() if isinstance(oid_bytes, bytes) else oid_bytes.hex())
+            try:
+                order = get_order(session, oid_hex)
+                remaining = order.amount_in - order.amount_filled_in
+                lines.append(f"[{i}] {oid_hex[:18]}... maker={order.maker[:10]}... side={order.side} in={order.amount_in} outMin={order.amount_out_min} remaining={remaining}")
+            except Exception:
+                lines.append(f"[{i}] (error loading)")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ---------------------------------------------------------------------------
+# PIXREMIX EXTRA: WEI FORMATTING & VALIDATION
+# ---------------------------------------------------------------------------
+
+
+def format_wei_short(wei: int) -> str:
+    """Format wei as short human string (e.g. 1.5K, 2.3M wei)."""
+    if wei == 0:
+        return "0"
+    if wei < 1000:
+        return str(wei)
+    if wei < 1_000_000:
+        return f"{wei / 1000:.1f}K".rstrip("0").rstrip(".")
+    if wei < 1_000_000_000:
+        return f"{wei / 1_000_000:.1f}M".rstrip("0").rstrip(".")
+    if wei < 1_000_000_000_000:
+        return f"{wei / 1_000_000_000:.1f}G".rstrip("0").rstrip(".")
+    return f"{wei / 10**18:.2f}e18"
+
+
+def format_ether(wei: int, decimals: int = 4) -> str:
+    """Format wei as ETH string."""
+    eth = wei / 10**18
+    return f"{eth:.{decimals}f} ETH"
+
+
+def validate_order_id_hex(s: str) -> bool:
+    """Return True if s is a valid 32-byte order ID hex (0x + 64 hex chars)."""
+    s = s.strip()
+    if s.startswith("0x"):
+        s = s[2:]
+    return len(s) == 64 and re.fullmatch(r"[0-9a-fA-F]{64}", s) is not None
+
+
+# ---------------------------------------------------------------------------
+# PIXREMIX EXTRA: BATCH QUOTE & PAGINATED ORDER IDS
+# ---------------------------------------------------------------------------
+
+
+def quote_batch(
+    session: PixRemixSession,
+    items: List[Tuple[str, int]],
+) -> List[Tuple[int, int, int]]:
+    """For each (order_id_hex, fill_amount_in) return (minAmountOut, feeAmount, makerReceives)."""
+    out: List[Tuple[int, int, int]] = []
+    for order_id_hex, fill_in in items:
+        try:
+            r = quote_fill(session, order_id_hex, fill_in)
