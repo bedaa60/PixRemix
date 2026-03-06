@@ -978,3 +978,73 @@ HURRAH_ABI_GET_GLOBAL_STATS = {
     "inputs": [],
     "name": "getGlobalStats",
     "outputs": [
+        {"name": "totalOrders", "type": "uint256"},
+        {"name": "totalOrdersActive", "type": "uint256"},
+        {"name": "totalOrdersFilled", "type": "uint256"},
+        {"name": "totalOrdersCancelled", "type": "uint256"},
+        {"name": "totalOrdersSettled", "type": "uint256"},
+    ],
+    "stateMutability": "view",
+    "type": "function",
+}
+
+
+def get_global_stats(session: PixRemixSession) -> Dict[str, int]:
+    """Return global order book stats (total, active, filled, cancelled, settled)."""
+    contract, w3 = connect_session(session)
+    abi_ext = HURRAH_ABI_FULL + [HURRAH_ABI_GET_GLOBAL_STATS]
+    Web3 = _maybe_web3()
+    contract_ext = w3.eth.contract(
+        address=Web3.to_checksum_address(session.contract_address),
+        abi=abi_ext,
+    )
+    raw = contract_ext.functions.getGlobalStats().call()
+    return {
+        "total_orders": raw[0],
+        "total_active": raw[1],
+        "total_filled": raw[2],
+        "total_cancelled": raw[3],
+        "total_settled": raw[4],
+    }
+
+
+# ---------------------------------------------------------------------------
+# FEE CALCULATION (off-chain)
+# ---------------------------------------------------------------------------
+
+
+def compute_fee_wei(amount_out: int, fee_bps: int) -> int:
+    """Fee in wei for a given fill amount out and fee bps."""
+    return (amount_out * fee_bps) // 10_000
+
+
+def compute_maker_receives_wei(amount_out: int, fee_bps: int) -> int:
+    """Amount maker receives after fee."""
+    return amount_out - compute_fee_wei(amount_out, fee_bps)
+
+
+# ---------------------------------------------------------------------------
+# SESSION FROM ENV
+# ---------------------------------------------------------------------------
+
+
+def session_from_env() -> PixRemixSession:
+    """Build session from env vars: PIXREMIX_RPC_URL, PIXREMIX_CONTRACT, PIXREMIX_PRIVATE_KEY."""
+    return PixRemixSession(
+        rpc_url=os.environ.get("PIXREMIX_RPC_URL", "http://127.0.0.1:8545"),
+        contract_address=os.environ.get("PIXREMIX_CONTRACT", "0x0000000000000000000000000000000000000000"),
+        private_key=os.environ.get("PIXREMIX_PRIVATE_KEY"),
+        chain_id=int(os.environ["PIXREMIX_CHAIN_ID"]) if os.environ.get("PIXREMIX_CHAIN_ID") else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ORDER BOOK SUMMARY REPORT
+# ---------------------------------------------------------------------------
+
+
+def build_order_book_report(session: PixRemixSession, max_orders: int = 50) -> str:
+    """Build a text report of the order book (first max_orders)."""
+    try:
+        total = total_order_count(session)
+        cfg = get_config(session)
