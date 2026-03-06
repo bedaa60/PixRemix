@@ -628,3 +628,73 @@ def load_session_from_file(path: str = DEFAULT_CONFIG_PATH) -> PixRemixSession:
     )
 
 
+def save_session_to_file(session: PixRemixSession, path: str = DEFAULT_CONFIG_PATH) -> None:
+    d = {
+        "rpc_url": session.rpc_url,
+        "contract_address": session.contract_address,
+        "chain_id": session.chain_id,
+    }
+    if session.private_key:
+        d["private_key"] = session.private_key
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# REPORTING AND EXPORT
+# ---------------------------------------------------------------------------
+
+
+def format_order_view(o: OrderView) -> str:
+    lines = [
+        f"OrderId: {o.order_id}",
+        f"Maker: {o.maker} Side: {o.side}",
+        f"Chains: origin={o.chain_id_origin} settle={o.chain_id_settle}",
+        f"AmountIn: {o.amount_in} AmountOutMin: {o.amount_out_min} FilledIn: {o.amount_filled_in}",
+        f"Expiry: {o.expiry_block} Cancelled: {o.cancelled} Settled: {o.settled}",
+    ]
+    return "\n".join(lines)
+
+
+def export_order_book_snapshot(session: PixRemixSession, from_index: int, to_index: int) -> List[Dict[str, Any]]:
+    """Fetch order IDs in range and return list of order view dicts (for JSON export)."""
+    contract, _ = connect_session(session)
+    total = contract.functions.totalOrderCount().call()
+    if to_index >= total:
+        to_index = total - 1
+    if from_index > to_index:
+        return []
+    out: List[Dict[str, Any]] = []
+    for i in range(from_index, to_index + 1):
+        oid_bytes = contract.functions.getOrderIdAt(i).call()
+        oid_hex = "0x" + (oid_bytes.hex() if isinstance(oid_bytes, bytes) else oid_bytes.hex())
+        try:
+            order = get_order(session, oid_hex)
+            out.append(dataclasses.asdict(order))
+        except Exception:
+            continue
+    return out
+
+
+# ---------------------------------------------------------------------------
+# GAS ESTIMATES (approximate)
+# ---------------------------------------------------------------------------
+
+GAS_POST_ORDER = 350_000
+GAS_FILL_ORDER = 300_000
+GAS_CANCEL_ORDER = 120_000
+GAS_FINALIZE_SETTLEMENT = 150_000
+
+
+def get_gas_estimates() -> Dict[str, int]:
+    return {
+        "postOrder": GAS_POST_ORDER,
+        "fillOrder": GAS_FILL_ORDER,
+        "cancelOrder": GAS_CANCEL_ORDER,
+        "finalizeSettlement": GAS_FINALIZE_SETTLEMENT,
+    }
+
+
+# ---------------------------------------------------------------------------
+# MAIN CLI
+# ---------------------------------------------------------------------------
