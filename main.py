@@ -558,3 +558,73 @@ def interactive_fill_order(session: PixRemixSession) -> Optional[str]:
         print("Tx hash:", tx_hash)
         return tx_hash
     except Exception as e:
+        print("Error:", e)
+        return None
+
+
+def interactive_cancel_order(session: PixRemixSession) -> Optional[str]:
+    """Interactive flow to cancel an order; returns tx hash or None."""
+    print("=== Cancel order ===")
+    order_id_hex = input("Order ID (hex): ").strip()
+    if not order_id_hex.startswith("0x"):
+        order_id_hex = "0x" + order_id_hex
+    try:
+        tx_hash = cancel_order_tx(session, order_id_hex)
+        print("Tx hash:", tx_hash)
+        return tx_hash
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+
+def interactive_query_order(session: PixRemixSession) -> None:
+    """Print order details for a given order ID."""
+    order_id_hex = input("Order ID (hex): ").strip()
+    if not order_id_hex.startswith("0x"):
+        order_id_hex = "0x" + order_id_hex
+    try:
+        order = get_order(session, order_id_hex)
+        print("Maker:", order.maker)
+        print("Side:", order.side)
+        print("Chain origin/settle:", order.chain_id_origin, order.chain_id_settle)
+        print("Amount In:", order.amount_in)
+        print("Amount Out Min:", order.amount_out_min)
+        print("Amount Filled In:", order.amount_filled_in)
+        print("Expiry Block:", order.expiry_block)
+        print("Cancelled:", order.cancelled)
+        print("Settled:", order.settled)
+        print("Posted At:", order.posted_at)
+    except Exception as e:
+        print("Error:", e)
+
+
+def interactive_config(session: PixRemixSession) -> None:
+    """Print contract config."""
+    try:
+        cfg = get_config(session)
+        print("Fee (bps):", cfg.fee_bps)
+        print("Min order amount:", cfg.min_order_amount)
+        print("Max order amount:", cfg.max_order_amount)
+        print("Paused:", cfg.paused)
+    except Exception as e:
+        print("Error:", e)
+
+
+# ---------------------------------------------------------------------------
+# CONFIG FILE LOAD / SAVE
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIG_PATH = "pixremix_config.json"
+
+
+def load_session_from_file(path: str = DEFAULT_CONFIG_PATH) -> PixRemixSession:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return PixRemixSession(
+        rpc_url=data.get("rpc_url", "http://127.0.0.1:8545"),
+        contract_address=data["contract_address"],
+        private_key=data.get("private_key"),
+        chain_id=data.get("chain_id"),
+    )
+
+
