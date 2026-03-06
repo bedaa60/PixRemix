@@ -768,3 +768,73 @@ def main(argv: List[str]) -> int:
             print("Error:", e)
             return 1
         return 0
+
+    if action == "export":
+        from_idx = _prompt_int("From index", 0)
+        to_idx = _prompt_int("To index", 99)
+        out_path = input("Output JSON path [pixremix_export.json]: ").strip() or "pixremix_export.json"
+        try:
+            data = export_order_book_snapshot(session, from_idx, to_idx)
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            print(f"Exported {len(data)} orders to {out_path}")
+        except Exception as e:
+            print("Error:", e)
+            return 1
+        return 0
+
+    if action == "health":
+        print_health(session)
+        return 0
+
+    if action == "csv-export":
+        from_idx = _prompt_int("From index", 0)
+        to_idx = _prompt_int("To index", 99)
+        out_path = input("Output CSV path [pixremix_orders.csv]: ").strip() or "pixremix_orders.csv"
+        try:
+            n = export_order_book_csv(session, from_idx, to_idx, out_path)
+            print(f"Exported {n} orders to {out_path}")
+        except Exception as e:
+            print("Error:", e)
+            return 1
+        return 0
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# VALIDATION HELPERS
+# ---------------------------------------------------------------------------
+
+
+def validate_order_params(
+    side: int,
+    chain_id_origin: int,
+    chain_id_settle: int,
+    amount_in: int,
+    amount_out_min: int,
+    expiry_block: int,
+    current_block: int,
+    min_order_amount: int,
+    max_order_amount: int,
+) -> List[str]:
+    """Return list of validation errors; empty if valid."""
+    errs: List[str] = []
+    if side not in (0, 1):
+        errs.append("Side must be 0 (buy) or 1 (sell).")
+    if chain_id_origin <= 0 or chain_id_settle <= 0:
+        errs.append("Chain IDs must be positive.")
+    if amount_in < min_order_amount:
+        errs.append(f"Amount in below min {min_order_amount}.")
+    if amount_in > max_order_amount:
+        errs.append(f"Amount in above max {max_order_amount}.")
+    if expiry_block <= current_block:
+        errs.append("Expiry block must be in the future.")
+    if expiry_block - current_block < 2:
+        errs.append("Expiry offset must be at least 2 blocks.")
+    if amount_out_min <= 0:
+        errs.append("Amount out min must be positive.")
+    return errs
+
+
+def validate_fill_params(
