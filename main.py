@@ -698,3 +698,73 @@ def get_gas_estimates() -> Dict[str, int]:
 # ---------------------------------------------------------------------------
 # MAIN CLI
 # ---------------------------------------------------------------------------
+
+
+def main(argv: List[str]) -> int:
+    parser = argparse.ArgumentParser(description=f"{APP_NAME} — Hurrah OTC order book client")
+    parser.add_argument("--version", action="store_true", help="Print version")
+    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Config JSON path")
+    parser.add_argument("--rpc", help="Override RPC URL")
+    parser.add_argument("--contract", help="Override contract address")
+    parser.add_argument("action", nargs="?", choices=["post", "fill", "cancel", "query", "config", "count", "maker-orders", "export", "health", "csv-export"], help="Action")
+    args = parser.parse_args(argv)
+
+    if args.version:
+        print(f"{APP_NAME} {APP_VERSION}")
+        return 0
+
+    if not os.path.exists(args.config):
+        print(f"Config not found: {args.config}. Create a JSON with rpc_url, contract_address, optional private_key.")
+        return 1
+
+    session = load_session_from_file(args.config)
+    if args.rpc:
+        session.rpc_url = args.rpc
+    if args.contract:
+        session.contract_address = args.contract
+
+    action = args.action
+    if not action:
+        print("Choose: post | fill | cancel | query | config | count | maker-orders | export | health | csv-export")
+        return 0
+
+    if action == "config":
+        interactive_config(session)
+        return 0
+
+    if action == "count":
+        try:
+            n = total_order_count(session)
+            print("Total orders:", n)
+        except Exception as e:
+            print("Error:", e)
+            return 1
+        return 0
+
+    if action == "query":
+        interactive_query_order(session)
+        return 0
+
+    if action == "post":
+        interactive_post_order(session)
+        return 0
+
+    if action == "fill":
+        interactive_fill_order(session)
+        return 0
+
+    if action == "cancel":
+        interactive_cancel_order(session)
+        return 0
+
+    if action == "maker-orders":
+        maker = input("Maker address: ").strip()
+        try:
+            ids = get_maker_order_ids(session, maker)
+            for oid in ids:
+                print(oid)
+            print(f"Total: {len(ids)}")
+        except Exception as e:
+            print("Error:", e)
+            return 1
+        return 0
