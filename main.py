@@ -1188,3 +1188,73 @@ def dry_run_post_tx(
         params.amount_out_min,
         params.expiry_block,
     ).build_transaction({
+        "from": from_addr,
+        "gas": gas_limit,
+    })
+    return dict(tx)
+
+
+def export_order_book_csv(session: PixRemixSession, from_index: int, to_index: int, path: str) -> int:
+    """Export order book range to CSV; returns number of rows written."""
+    data = export_order_book_snapshot(session, from_index, to_index)
+    if not data:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["order_id", "maker", "side", "chain_id_origin", "chain_id_settle", "amount_in", "amount_out_min", "amount_filled_in", "expiry_block", "cancelled", "settled", "posted_at"])
+        return 0
+    keys = list(data[0].keys())
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(data)
+    return len(data)
+
+
+# ---------------------------------------------------------------------------
+# PIXREMIX EXTRA: HEALTH CHECK
+# ---------------------------------------------------------------------------
+
+
+def health_check(session: PixRemixSession) -> Dict[str, Any]:
+    """Check RPC connection and contract config. Returns dict with rpc_ok, contract_ok, chain_id, config, error."""
+    result: Dict[str, Any] = {"rpc_ok": False, "contract_ok": False, "chain_id": None, "config": None, "error": None}
+    try:
+        contract, w3 = connect_session(session)
+        result["rpc_ok"] = True
+        result["chain_id"] = w3.eth.chain_id
+        cfg = get_config(session)
+        result["contract_ok"] = True
+        result["config"] = {"fee_bps": cfg.fee_bps, "min_order_amount": cfg.min_order_amount, "max_order_amount": cfg.max_order_amount, "paused": cfg.paused}
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def print_health(session: PixRemixSession) -> None:
+    """Print health check result to stdout."""
+    h = health_check(session)
+    print("RPC OK:", h["rpc_ok"])
+    print("Contract OK:", h["contract_ok"])
+    if h.get("chain_id") is not None:
+        print("Chain ID:", h["chain_id"])
+    if h.get("config"):
+        print("Config:", h["config"])
+    if h.get("error"):
+        print("Error:", h["error"])
+
+
+# ---------------------------------------------------------------------------
+# ENTRY POINT (alternate)
+# ---------------------------------------------------------------------------
+
+
+def run_interactive() -> int:
+    """Run interactive menu (no argparse)."""
+    print(f"{APP_NAME} v{APP_VERSION} — Hurrah OTC order book client (remix)")
+    if not os.path.exists(DEFAULT_CONFIG_PATH):
+        print(f"Create {DEFAULT_CONFIG_PATH} with rpc_url, contract_address, optional private_key.")
+        return 1
+    session = load_session_from_file()
+    while True:
+        print("\nActions: post | fill | cancel | query | config | count | maker-orders | export | report | runbook | health | csv-export | quit")
+        action = input("Action: ").strip().lower()
