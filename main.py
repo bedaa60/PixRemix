@@ -1258,3 +1258,67 @@ def run_interactive() -> int:
     while True:
         print("\nActions: post | fill | cancel | query | config | count | maker-orders | export | report | runbook | health | csv-export | quit")
         action = input("Action: ").strip().lower()
+        if not action or action == "quit":
+            break
+        if action == "report":
+            print(build_order_book_report(session))
+            continue
+        if action == "runbook":
+            print_runbook()
+            continue
+        if action == "health":
+            print_health(session)
+            continue
+        if action == "csv-export":
+            from_idx = _prompt_int("From index", 0)
+            to_idx = _prompt_int("To index", 99)
+            out_path = input("Output CSV path [pixremix_orders.csv]: ").strip() or "pixremix_orders.csv"
+            try:
+                n = export_order_book_csv(session, from_idx, to_idx, out_path)
+                print(f"Exported {n} orders to {out_path}")
+            except Exception as e:
+                print("Error:", e)
+            continue
+        if action in ("post", "fill", "cancel", "query", "config", "count", "maker-orders", "export"):
+            if action == "config":
+                interactive_config(session)
+            elif action == "count":
+                try:
+                    print("Total orders:", total_order_count(session))
+                except Exception as e:
+                    print("Error:", e)
+            elif action == "query":
+                interactive_query_order(session)
+            elif action == "post":
+                interactive_post_order(session)
+            elif action == "fill":
+                interactive_fill_order(session)
+            elif action == "cancel":
+                interactive_cancel_order(session)
+            elif action == "maker-orders":
+                maker = input("Maker address: ").strip()
+                try:
+                    for oid in get_maker_order_ids(session, maker):
+                        print(oid)
+                except Exception as e:
+                    print("Error:", e)
+            elif action == "export":
+                from_idx = _prompt_int("From index", 0)
+                to_idx = _prompt_int("To index", 99)
+                out_path = input("Output path [pixremix_export.json]: ").strip() or "pixremix_export.json"
+                try:
+                    data = export_order_book_snapshot(session, from_idx, to_idx)
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2)
+                    print(f"Exported {len(data)} orders")
+                except Exception as e:
+                    print("Error:", e)
+        else:
+            print("Unknown action.")
+    return 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
+        sys.exit(run_interactive())
+    sys.exit(main(sys.argv[1:]))
